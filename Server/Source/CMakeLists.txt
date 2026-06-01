@@ -35,7 +35,13 @@ if(MSVC)
 		winmm
 	)
 else()
-	target_link_libraries(Server PRIVATE dl atomic)
+		# libatomic is a separate library only on Linux/GCC; on macOS/clang
+		# the atomic builtins are in the compiler runtime and no such lib exists.
+		if(APPLE)
+			target_link_libraries(Server PRIVATE dl)
+		else()
+			target_link_libraries(Server PRIVATE dl atomic)
+		endif()
 
 	if(SHARED_STDCXXFS)
 		target_link_libraries(Server PRIVATE stdc++fs)
