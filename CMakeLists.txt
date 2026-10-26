@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.19)
-project(open-mp LANGUAGES C CXX VERSION 1.5.8)
+project(open-mp LANGUAGES C CXX VERSION 1.6.7)
 
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
@@ -19,6 +19,7 @@ if(MSVC)
 	add_link_options("/LARGEADDRESSAWARE")
 	# Use strict intermediate floating-point precision
 	add_compile_options("/fp:strict")
+	add_compile_options("/MP")
 	if(CMAKE_SIZEOF_VOID_P EQUAL 4)
 		add_compile_options("/arch:SSE2")
 	endif()
@@ -96,6 +97,7 @@ if(WIN32)
 		-DWIN32_LEAN_AND_MEAN
 		-D_CRT_DECLARE_NONSTDC_NAMES
 		-D_CRT_NONSTDC_NO_WARNINGS
+		-D_DISABLE_CONSTEXPR_MUTEX_CONSTRUCTOR
 	)
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 	add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
@@ -130,7 +132,7 @@ endfunction()
 
 set(BUILD_SERVER TRUE CACHE BOOL "Whether to build the open.mp server")
 set(BUILD_PAWN_COMPONENT TRUE CACHE BOOL "Whether to build the PAWN component")
-set(BUILD_UNICODE_COMPONENT FALSE CACHE BOOL "Whether to build the Unicode component")
+set(BUILD_UNICODE_COMPONENT TRUE CACHE BOOL "Whether to build the Unicode component")
 set(BUILD_LEGACY_COMPONENTS TRUE CACHE BOOL "Whether to build the legacy components")
 set(BUILD_TEST_COMPONENTS FALSE CACHE BOOL "Whether to build the test component")
 set(BUILD_SQLITE_COMPONENT TRUE CACHE BOOL "Whether to build the SQLite component")

@@ -53,11 +53,11 @@ SCRIPT_API(AttachPlayerObjectToPlayer, bool(IPlayer& player, IPlayerObject& obje
 	return true;
 }
 
-SCRIPT_API(AttachPlayerObjectToObject, bool(IPlayer& player, IPlayerObject& object, IPlayerObject* attachedTo, Vector3 offset, Vector3 rotation))
+SCRIPT_API(AttachPlayerObjectToObject, bool(IPlayer& player, IPlayerObject& object, IPlayerObject* attachedTo, Vector3 offset, Vector3 rotation, bool syncRotation))
 {
 	if (attachedTo)
 	{
-		object.attachToObject(*attachedTo, offset, rotation);
+		object.attachToObject(*attachedTo, offset, rotation, syncRotation);
 	}
 	else
 	{
@@ -144,6 +144,11 @@ SCRIPT_API(BeginPlayerObjectEditing, bool(IPlayerObjectData& data, IPlayerObject
 {
 	data.beginEditing(object);
 	return true;
+}
+
+SCRIPT_API(IsPlayerEditingObject, bool(IPlayerObjectData& data))
+{
+	return data.editingObject() == ObjectEditingType::ObjectEditingType_Object;
 }
 
 SCRIPT_API(SetPlayerObjectMaterial, bool(IPlayer& player, IPlayerObject& object, int materialIndex, int modelId, const std::string& textureLibrary, const std::string& textureName, uint32_t materialColour))

@@ -429,6 +429,7 @@ void RakNetLegacyNetwork::OnPlayerConnect(RakNet::RPCParameters* rpcParams, void
 
 		network->core->logLn(LogLevel::Warning, "Invalid client connecting from %.*s", int(addressString.length()), addressString.data());
 		network->rakNetServer.Kick(rpcParams->sender);
+		network->rakNetServer.AddToBanList(addressString.data(), 15'000u);
 		return;
 	}
 
@@ -827,8 +828,6 @@ void RakNetLegacyNetwork::start()
 {
 	SAMPRakNet::Init(core);
 	SAMPRakNet::SeedToken();
-	lastCookieSeed = Time::now();
-	SAMPRakNet::SeedCookie();
 
 	playerFromRakIndex.fill(nullptr);
 
@@ -914,6 +913,14 @@ void RakNetLegacyNetwork::start()
 	{
 		rakNetServer.ReserveSlots(npcComponent->count());
 	}
+
+	// SeedCookie must be called after rakNetServer.Start() because Start() internally calls
+	// RakPeer::Disconnect() which resets RakNet's internal state. Seeding the cookie before
+	// Start() means the seeded value is discarded, leaving the cookie in an invalid state
+	// until the next onTick() re-seed. Clients connecting in that window fail the cookie
+	// check and their packets are silently ignored (issue #1211).
+	lastCookieSeed = Time::now();
+	SAMPRakNet::SeedCookie();
 }
 
 void RakNetLegacyNetwork::onTick(Microseconds elapsed, TimePoint now)

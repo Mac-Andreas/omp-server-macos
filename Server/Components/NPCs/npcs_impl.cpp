@@ -27,13 +27,22 @@ void NPCComponent::onInit(IComponentList* components)
 		objects = components->queryComponent<IObjectsComponent>();
 		actors = components->queryComponent<IActorsComponent>();
 
-		vehicles->getPoolEventDispatcher().addEventHandler(this);
-		vehicles->getEventDispatcher().addEventHandler(this);
+		if (vehicles != nullptr)
+		{
+			vehicles->getPoolEventDispatcher().addEventHandler(this);
+			vehicles->getEventDispatcher().addEventHandler(this);
+		}
 	}
 }
 
 void NPCComponent::free()
 {
+	auto shallowCopy = storage._entries();
+	for (auto npc : shallowCopy)
+	{
+		release(npc->getID());
+	}
+
 	core->getEventDispatcher().removeEventHandler(this);
 	core->getPlayers().getPlayerDamageDispatcher().removeEventHandler(this);
 	core->getPlayers().getPoolEventDispatcher().removeEventHandler(this);
@@ -42,6 +51,7 @@ void NPCComponent::free()
 	{
 		vehicles->getPoolEventDispatcher().removeEventHandler(this);
 		vehicles->getEventDispatcher().removeEventHandler(this);
+		vehicles = nullptr;
 	}
 
 	delete this;
@@ -52,6 +62,16 @@ void NPCComponent::onFree(IComponent* component)
 	if (component == vehicles)
 	{
 		vehicles = nullptr;
+	}
+
+	if (component == objects)
+	{
+		objects = nullptr;
+	}
+
+	if (component == actors)
+	{
+		actors = nullptr;
 	}
 }
 

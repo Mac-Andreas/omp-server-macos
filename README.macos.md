@@ -4,19 +4,23 @@ This fork builds the [open.mp](https://github.com/openmultiplayer/open.mp) serve
 **natively on macOS arm64 (Apple Silicon)**. The resulting `omp-server` runs
 directly on macOS — **no Wine, no Docker, no Linux VM required**.
 
-- Base: upstream tag [`v1.5.8.3079`](https://github.com/openmultiplayer/open.mp/releases/tag/v1.5.8.3079)
-  (commit `c6759bd8`, build 3079)
+- Base: upstream `master` at commit `72bf89ce` (v1.6.7, build 3218 + 2)
 - Target: `macos / arm64`, static OpenSSL + static SQLite (fully self-contained)
 - Prebuilt server: see this repo's [Releases](../../releases) →
   `open.mp-macos-arm64.tar.gz`
 
 > Upstream officially ships only `linux-x86`, `linux-x86-dynssl` and `win-x86`.
-> There is no upstream macOS build, and the source has one Apple-specific build
-> break (documented below).
+> There is no upstream macOS build. Up to v1.5.8 the source also had one
+> Apple-specific build break (documented below); upstream has since fixed it, so
+> current `master` builds on macOS without source changes.
 
 ---
 
 ## The upstream macOS build issue
+
+> **Fixed upstream.** Upstream now links `dl atomic` only under
+> `if(UNIX AND NOT APPLE)`, which covers this. The write-up below is kept for
+> reference; this fork no longer carries its own patch.
 
 Building the upstream source on macOS arm64 fails at the **final link step** of
 `omp-server` with:
@@ -142,7 +146,7 @@ components/*.dylib   (22 components)
 | Symptom | Cause | Handling |
 | --- | --- | --- |
 | `Compatibility with CMake < 3.5 has been removed` | bundled `glm` submodule | pass `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` |
-| `ld: library 'atomic' not found` | Linux-only `libatomic` link | fixed in this fork (see above) |
+| `ld: library 'atomic' not found` | Linux-only `libatomic` link | fixed upstream (see above) |
 | Conan install fails on Python 3.13/3.14 | Conan 1.x predates them | use Python 3.12 venv |
 
 ---
@@ -244,6 +248,6 @@ from clashing against a statically-linked copy.
 ## Relationship to upstream
 
 This is a fork of `openmultiplayer/open.mp` for the sole purpose of producing a
-native macOS arm64 server. The only source change vs. upstream tag
-`v1.5.8.3079` is the `libatomic` link guard described above. All credit for
-open.mp goes to the upstream project and its contributors.
+native macOS arm64 server. It tracks upstream `master`; the `libatomic` link
+guard it used to carry is now upstream, so the only difference is this README.
+All credit for open.mp goes to the upstream project and its contributors.
