@@ -115,30 +115,42 @@ Requirements:
 
 - macOS arm64 (Apple Silicon), Xcode command line tools (Apple Clang)
 - CMake 3.19+
-- [Conan **1.x**](https://conan.io/) (**not** 2.x). Conan 1.x needs Python ≤ 3.12.
+- [Conan **2.x**](https://conan.io/) — upstream moved to Conan 2; Conan 1.x is
+  rejected at configure time ("Conan version must be 2.0.0 or later")
+
+These steps follow upstream's macOS CI (see [`BUILD.md`](BUILD.md)), using the
+default Makefiles generator instead of Ninja:
 
 ```bash
 git clone --recursive https://github.com/xyranaut/omp-server-macos.git
 cd omp-server-macos
 git checkout macos-arm64
 
-# Conan 1.x in an isolated Python 3.12 venv (avoids system Python 3.13/3.14 issues)
-python3.12 -m venv .conan-venv
-./.conan-venv/bin/pip install "conan==1.66.0"
-export PATH="$PWD/.conan-venv/bin:$PATH"
+# Conan 2 in an isolated venv
+python3 -m venv build/conan-venv
+./build/conan-venv/bin/pip install conan
+export PATH="$PWD/build/conan-venv/bin:$PATH"
+conan profile detect --force
 
-mkdir build && cd build
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export MACOSX_DEPLOYMENT_TARGET=11.0
+export CFLAGS="-isysroot ${SDKROOT}" CXXFLAGS="-isysroot ${SDKROOT}" LDFLAGS="-isysroot ${SDKROOT}"
+
 # CMAKE_POLICY_VERSION_MINIMUM is needed for CMake 4.x because the bundled
 # `glm` submodule declares cmake_minimum_required(VERSION < 3.5).
-cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
-cmake --build . --config RelWithDebInfo -j$(sysctl -n hw.ncpu)
+cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_OSX_SYSROOT="${SDKROOT}" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DTARGET_BUILD_ARCH=arm64 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DSHARED_OPENSSL=false -DSTATIC_STDCXX=false \
+  -DBUILD_SERVER=1 -DBUILD_ABI_CHECK_TOOL=0
+cmake --build build --config RelWithDebInfo --parallel "$(sysctl -n hw.logicalcpu)"
 ```
 
 Output lands in `build/Output/RelWithDebInfo/Server/`:
 
 ```
 omp-server
-components/*.dylib   (22 components)
+components/*.dylib   (23 components)
 ```
 
 ### Notes on toolchain quirks
@@ -147,7 +159,7 @@ components/*.dylib   (22 components)
 | --- | --- | --- |
 | `Compatibility with CMake < 3.5 has been removed` | bundled `glm` submodule | pass `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` |
 | `ld: library 'atomic' not found` | Linux-only `libatomic` link | fixed upstream (see above) |
-| Conan install fails on Python 3.13/3.14 | Conan 1.x predates them | use Python 3.12 venv |
+| `Conan version must be 2.0.0 or later` | upstream moved to Conan 2 | install Conan 2.x (any current Python 3) |
 
 ---
 
