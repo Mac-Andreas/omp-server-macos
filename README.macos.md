@@ -4,7 +4,9 @@ This fork builds the [open.mp](https://github.com/openmultiplayer/open.mp) serve
 **natively on macOS arm64 (Apple Silicon)**. The resulting `omp-server` runs
 directly on macOS — **no Wine, no Docker, no Linux VM required**.
 
-- Base: upstream `master` at commit `72bf89ce` (v1.6.7, build 3218 + 2)
+- Base: upstream `master` at commit `2b4a69dd` (v1.6.7, build 3218 + cpp-httplib 0.66 and the
+  CoreFoundation/Security link fix)
+- Extra: the **Crowd** component (`components/Crowd.dylib`) - see [Crowd component](#crowd-component)
 - Target: `macos / arm64`, static OpenSSL + static SQLite (fully self-contained)
 - Prebuilt server: see this repo's [Releases](../../releases) →
   `open.mp-macos-arm64.tar.gz`
@@ -257,9 +259,42 @@ from clashing against a statically-linked copy.
 
 ---
 
+## Crowd component
+
+`Server/Components/Crowd` adds a server component for the open.mp launcher's **Local crowd**
+(Mac Andreas omp-launcher-macOS + the omp-crowd client DLL): players' games bring back GTA's own
+pedestrians and traffic, as GTA Online does - each game runs its own crowd; when players are
+together, one owns the crowd around them and the others see copies.
+
+The component runs no AI and creates nothing in the game. It links each player's game to its
+player over its own UDP port (the game's port + 1), relays crowd updates between players within
+100 m, decides who owns the crowd, and lets the server's scripts decide whether it runs at all:
+
+- Query rules: `crowd` = `yes` / `no` (`no` until a script turns it on - the launcher shows it
+  green / red and loads the crowd only for `yes`), and `crowd_port`.
+- Pawn natives (`Server/Components/Crowd/omp-crowd.inc`, also attached to the release):
+
+```pawn
+#include <omp-crowd>
+
+public OnGameModeInit()
+{
+    Crowd_Enable(true);           // "crowd: yes"
+    Crowd_SetDensity(0.6, 0.5);   // peds, cars (0.0 - 1.0)
+    Crowd_SetLimits(20, 8);       // per player: up to 40 peds, 20 cars
+    return 1;
+}
+// Crowd_SetPlayerEnabled(playerid, false) - one player off (an event, an interior...)
+// Crowd_IsEnabled(), Crowd_IsPlayerLinked(playerid)
+```
+
+Open the crowd port (UDP, game port + 1) in the firewall for players outside your network.
+It's built on macOS and Linux (POSIX sockets), not on Windows.
+
 ## Relationship to upstream
 
 This is a fork of `openmultiplayer/open.mp` for the sole purpose of producing a
 native macOS arm64 server. It tracks upstream `master`; the `libatomic` link
-guard it used to carry is now upstream, so the only difference is this README.
+guard it used to carry is now upstream, so the differences are this README and the Crowd
+component (`Server/Components/Crowd`, one line in `Server/Components/CMakeLists.txt`).
 All credit for open.mp goes to the upstream project and its contributors.

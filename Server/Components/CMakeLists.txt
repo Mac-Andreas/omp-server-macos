@@ -50,3 +50,8 @@ if(BUILD_TEST_COMPONENTS)
 endif()
 
 add_subdirectory(CustomModels)
+
+# Crowd (the launcher's Local crowd relay) - POSIX sockets, not built on Windows
+if(NOT WIN32)
+	add_subdirectory(Crowd)
+endif()
