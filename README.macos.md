@@ -289,7 +289,10 @@ public OnGameModeInit()
 ```
 
 Open the crowd port (UDP, game port + 1) in the firewall for players outside your network.
-It's built on macOS and Linux (POSIX sockets), not on Windows.
+It's built on macOS and Linux (POSIX sockets), not on Windows. Linux servers: the release has
+`Crowd-linux-x86.so` (the official 32-bit linux-x86 server) and `Crowd-linux-arm64.so` (arm64,
+e.g. a Raspberry Pi) - put the one for your server in its `components/` as `Crowd.so`. They're
+built by `Server/Components/Crowd/build-linux.sh` (Debian containers, glibc 2.36).
 
 ## Relationship to upstream
 
