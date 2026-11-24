@@ -296,6 +296,7 @@ __pycache__/
 *.i
 .vscode/
 /docker/conan/
+/docker/conan2/
 /docker/data/
 /buildlinux/*
 **/CMakeFiles/*
@@ -312,3 +313,6 @@ cmake_install.cmake
 *-targets.cmake
 CTestTestfile.cmake
 *Config.cmake
+
+# Crowd component Linux builds (Server/Components/Crowd/build-linux.sh)
+build-linux-crowd/

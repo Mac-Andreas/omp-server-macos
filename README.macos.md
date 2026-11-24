@@ -4,19 +4,25 @@ This fork builds the [open.mp](https://github.com/openmultiplayer/open.mp) serve
 **natively on macOS arm64 (Apple Silicon)**. The resulting `omp-server` runs
 directly on macOS — **no Wine, no Docker, no Linux VM required**.
 
-- Base: upstream tag [`v1.5.8.3079`](https://github.com/openmultiplayer/open.mp/releases/tag/v1.5.8.3079)
-  (commit `c6759bd8`, build 3079)
+- Base: upstream `master` at commit `2b4a69dd` (v1.6.7, build 3218 + cpp-httplib 0.66 and the
+  CoreFoundation/Security link fix)
+- Extra: the **Crowd** component (`components/Crowd.dylib`) - see [Crowd component](#crowd-component)
 - Target: `macos / arm64`, static OpenSSL + static SQLite (fully self-contained)
 - Prebuilt server: see this repo's [Releases](../../releases) →
   `open.mp-macos-arm64.tar.gz`
 
 > Upstream officially ships only `linux-x86`, `linux-x86-dynssl` and `win-x86`.
-> There is no upstream macOS build, and the source has one Apple-specific build
-> break (documented below).
+> There is no upstream macOS build. Up to v1.5.8 the source also had one
+> Apple-specific build break (documented below); upstream has since fixed it, so
+> current `master` builds on macOS without source changes.
 
 ---
 
 ## The upstream macOS build issue
+
+> **Fixed upstream.** Upstream now links `dl atomic` only under
+> `if(UNIX AND NOT APPLE)`, which covers this. The write-up below is kept for
+> reference; this fork no longer carries its own patch.
 
 Building the upstream source on macOS arm64 fails at the **final link step** of
 `omp-server` with:
@@ -111,30 +117,42 @@ Requirements:
 
 - macOS arm64 (Apple Silicon), Xcode command line tools (Apple Clang)
 - CMake 3.19+
-- [Conan **1.x**](https://conan.io/) (**not** 2.x). Conan 1.x needs Python ≤ 3.12.
+- [Conan **2.x**](https://conan.io/) — upstream moved to Conan 2; Conan 1.x is
+  rejected at configure time ("Conan version must be 2.0.0 or later")
+
+These steps follow upstream's macOS CI (see [`BUILD.md`](BUILD.md)), using the
+default Makefiles generator instead of Ninja:
 
 ```bash
 git clone --recursive https://github.com/xyranaut/omp-server-macos.git
 cd omp-server-macos
 git checkout macos-arm64
 
-# Conan 1.x in an isolated Python 3.12 venv (avoids system Python 3.13/3.14 issues)
-python3.12 -m venv .conan-venv
-./.conan-venv/bin/pip install "conan==1.66.0"
-export PATH="$PWD/.conan-venv/bin:$PATH"
+# Conan 2 in an isolated venv
+python3 -m venv build/conan-venv
+./build/conan-venv/bin/pip install conan
+export PATH="$PWD/build/conan-venv/bin:$PATH"
+conan profile detect --force
 
-mkdir build && cd build
+export SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"
+export MACOSX_DEPLOYMENT_TARGET=11.0
+export CFLAGS="-isysroot ${SDKROOT}" CXXFLAGS="-isysroot ${SDKROOT}" LDFLAGS="-isysroot ${SDKROOT}"
+
 # CMAKE_POLICY_VERSION_MINIMUM is needed for CMake 4.x because the bundled
 # `glm` submodule declares cmake_minimum_required(VERSION < 3.5).
-cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ..
-cmake --build . --config RelWithDebInfo -j$(sysctl -n hw.ncpu)
+cmake -S . -B build -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_OSX_SYSROOT="${SDKROOT}" -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 \
+  -DTARGET_BUILD_ARCH=arm64 -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DSHARED_OPENSSL=false -DSTATIC_STDCXX=false \
+  -DBUILD_SERVER=1 -DBUILD_ABI_CHECK_TOOL=0
+cmake --build build --config RelWithDebInfo --parallel "$(sysctl -n hw.logicalcpu)"
 ```
 
 Output lands in `build/Output/RelWithDebInfo/Server/`:
 
 ```
 omp-server
-components/*.dylib   (22 components)
+components/*.dylib   (23 components)
 ```
 
 ### Notes on toolchain quirks
@@ -142,8 +160,8 @@ components/*.dylib   (22 components)
 | Symptom | Cause | Handling |
 | --- | --- | --- |
 | `Compatibility with CMake < 3.5 has been removed` | bundled `glm` submodule | pass `-DCMAKE_POLICY_VERSION_MINIMUM=3.5` |
-| `ld: library 'atomic' not found` | Linux-only `libatomic` link | fixed in this fork (see above) |
-| Conan install fails on Python 3.13/3.14 | Conan 1.x predates them | use Python 3.12 venv |
+| `ld: library 'atomic' not found` | Linux-only `libatomic` link | fixed upstream (see above) |
+| `Conan version must be 2.0.0 or later` | upstream moved to Conan 2 | install Conan 2.x (any current Python 3) |
 
 ---
 
@@ -241,9 +259,45 @@ from clashing against a statically-linked copy.
 
 ---
 
+## Crowd component
+
+`Server/Components/Crowd` adds a server component for the open.mp launcher's **Local crowd**
+(Mac Andreas omp-launcher-macOS + the omp-crowd client DLL): players' games bring back GTA's own
+pedestrians and traffic, as GTA Online does - each game runs its own crowd; when players are
+together, one owns the crowd around them and the others see copies.
+
+The component runs no AI and creates nothing in the game. It links each player's game to its
+player over its own UDP port (the game's port + 1), relays crowd updates between players within
+100 m, decides who owns the crowd, and lets the server's scripts decide whether it runs at all:
+
+- Query rules: `crowd` = `yes` / `no` (`no` until a script turns it on - the launcher shows it
+  green / red and loads the crowd only for `yes`), and `crowd_port`.
+- Pawn natives (`Server/Components/Crowd/omp-crowd.inc`, also attached to the release):
+
+```pawn
+#include <omp-crowd>
+
+public OnGameModeInit()
+{
+    Crowd_Enable(true);           // "crowd: yes"
+    Crowd_SetDensity(0.6, 0.5);   // peds, cars (0.0 - 1.0)
+    Crowd_SetLimits(20, 8);       // per player: up to 40 peds, 20 cars
+    return 1;
+}
+// Crowd_SetPlayerEnabled(playerid, false) - one player off (an event, an interior...)
+// Crowd_IsEnabled(), Crowd_IsPlayerLinked(playerid)
+```
+
+Open the crowd port (UDP, game port + 1) in the firewall for players outside your network.
+It's built on macOS and Linux (POSIX sockets), not on Windows. Linux servers: the release has
+`Crowd-linux-x86.so` (the official 32-bit linux-x86 server) and `Crowd-linux-arm64.so` (arm64,
+e.g. a Raspberry Pi) - put the one for your server in its `components/` as `Crowd.so`. They're
+built by `Server/Components/Crowd/build-linux.sh` (Debian containers, glibc 2.36).
+
 ## Relationship to upstream
 
 This is a fork of `openmultiplayer/open.mp` for the sole purpose of producing a
-native macOS arm64 server. The only source change vs. upstream tag
-`v1.5.8.3079` is the `libatomic` link guard described above. All credit for
-open.mp goes to the upstream project and its contributors.
+native macOS arm64 server. It tracks upstream `master`; the `libatomic` link
+guard it used to carry is now upstream, so the differences are this README and the Crowd
+component (`Server/Components/Crowd`, one line in `Server/Components/CMakeLists.txt`).
+All credit for open.mp goes to the upstream project and its contributors.
